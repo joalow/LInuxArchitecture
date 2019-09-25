@@ -57,7 +57,7 @@ void modulo_lin_clean(void)
 		 //En aux almacenamos el siguiente nodo de la lista y cur_node es el nodo a borrar (???)
 		list_for_each_safe(cur_node, aux, &mylist) {
 			item = list_entry(cur_node, struct list_item, links);//&mylist);
-			//list_del(cur_node);
+			list_del(cur_node);
 			vfree(item);
 		};
 		printk(KERN_INFO "Lista enlazada eliminada.\n");
@@ -98,6 +98,8 @@ static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_
 {
 	char* kbuff = (char*)vmalloc(len);
 	struct list_item* item = NULL;
+	struct list_head* cur_node = NULL;
+	struct list_head* aux = NULL;
 	int n;
 
 	if(copy_from_user(kbuff, buff, len) != 0){
@@ -108,19 +110,32 @@ static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_
 
 	// ADD
 	if(sscanf(kbuff, "add %d",&n )==1){
+		item = vmalloc(sizeof(struct list_item));
 		item->data = n;
+		list_add_tail(&item->links,&mylist);
 		// add tail y pasarle la estructura grande->links (esquema dibujo diapo 43)
-
 	}
 	// REMOVE
-	else if(){
-
+	else if(sscanf(kbuff,"remove %d",&n)==1){
+		list_for_each_safe(cur_node, aux, &mylist) {
+			item = list_entry(cur_node, struct list_item, links);
+			if(item->data == n){
+				list_del(cur_node);
+				vfree(item);
+			}
+		};
 	}
 	// CLEAUNP
-	else if(){
-
+	else if(sscanf(kbuff,"cleanup")==1){
+		list_for_each_safe(cur_node, aux, &mylist) {
+			item = list_entry(cur_node, struct list_item, links);
+			list_del(cur_node);
+			vfree(item);
+		};
 	}
-	else -EINVAL;
+	else
+	 -EINVAL;
+	return len;
 }
 
 /* Declaración de funciones init y exit */
