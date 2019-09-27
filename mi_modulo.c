@@ -8,7 +8,6 @@ MODULE_LICENSE("GPL"); 	/*  Licencia del modulo */
 struct list_head mylist; // LISTA ENLAZADA
 struct proc_dir_entry* my_proc; // Entrada /proc
 
-static int Device_Open = 0;	/* Is device open?*/
 int sizeList = 0;
 
 // NODOS DE LA LISTA
@@ -17,16 +16,12 @@ struct list_item {
 	struct list_head links;
 };
 
-static int device_open(struct inode *inode, struct file *file);
-static int device_release(struct inode *inode, struct file *file);
 static ssize_t proc_read(struct file *filp, char *buffer, size_t length, loff_t * offset);
 static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_t * off);
 
 static struct file_operations fops = {
 	.read = proc_read,
 	.write = proc_write,
-	//.open = device_open,
-  //  .release = device_release
 };
 
 
@@ -82,7 +77,6 @@ static ssize_t proc_read(struct file *filp, char *buffer, size_t length, loff_t 
 
 	struct list_item* item = NULL;
 	struct list_head* nodo = NULL;
-	struct list_head* aux = NULL;
 
 
 	if(*offset>=sizeList)
@@ -119,6 +113,9 @@ static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_
 	struct list_item* item = NULL;
 	struct list_head* cur_node = NULL;
 	struct list_head* aux = NULL;
+	char* clean = (char*)vmalloc(10);
+	char* msg = "ERROR:Comando erroneo\n";
+	char* cleanup = "cleanup";
 	int n;
 
 	if(copy_from_user(kbuff, buff, len) != 0){
@@ -134,7 +131,6 @@ static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_
 		INIT_LIST_HEAD(&item->links);
 		list_add_tail(&item->links,&mylist);
 		sizeList += 1;
-		// add tail y pasarle la estructura grande->links (esquema dibujo diapo 43)
 	}
 	// REMOVE
 	else if(sscanf(kbuff,"remove %d",&n)==1){
@@ -148,20 +144,23 @@ static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_
 		};
 	}
 	// CLEAUNP
-	//else if(sscanf(kbuff,"%s","cleanup")==1){
-	else if(sscanf(kbuff,"cleanup")==1){
-		list_for_each_safe(cur_node, aux, &mylist) {
-			printk(KERN_INFO "borrando...");
-			item = list_entry(cur_node, struct list_item, links);
-			list_del(cur_node);
-			vfree(item);
-			sizeList -= 1;
+	else if(sscanf(kbuff,"%s",clean)==1){
+		if(strcmp(clean,cleanup)==0){
+			list_for_each_safe(cur_node, aux, &mylist) {
+				item = list_entry(cur_node, struct list_item, links);
+				list_del(cur_node);
+				vfree(item);
+				sizeList -= 1;
 
-		};
+			};
+		}else{
+			vfree(kbuff);
+			vfree(clean);
+		 	return -EINVAL	;
+		}
 	}
-	else
-	 -EINVAL;
-				printk(KERN_INFO "borrando...");
+	vfree(kbuff);
+	vfree(clean);
 
 	return len;
 }
