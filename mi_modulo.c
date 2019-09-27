@@ -8,18 +8,25 @@ MODULE_LICENSE("GPL"); 	/*  Licencia del modulo */
 struct list_head mylist; // LISTA ENLAZADA
 struct proc_dir_entry* my_proc; // Entrada /proc
 
+static int Device_Open = 0;	/* Is device open?*/
+int sizeList = 0;
+
 // NODOS DE LA LISTA
 struct list_item {
 	int data;
 	struct list_head links;
 };
 
+static int device_open(struct inode *inode, struct file *file);
+static int device_release(struct inode *inode, struct file *file);
 static ssize_t proc_read(struct file *filp, char *buffer, size_t length, loff_t * offset);
 static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_t * off);
 
 static struct file_operations fops = {
 	.read = proc_read,
-	.write = proc_write
+	.write = proc_write,
+	//.open = device_open,
+  //  .release = device_release
 };
 
 
@@ -70,27 +77,39 @@ static ssize_t proc_read(struct file *filp, char *buffer, size_t length, loff_t 
 {
 	// vmalloc() retorna un puntero a void pero le ponemos que sea puntero a char que es donde se almacena el buffer en el kernel para
 	// pasarlo posteriormente al espacio de usuario con copy_to_user()
-	char* kbuff = (char*)vmalloc(length); // Aqui reservamos memoria y guardamos el principio de todo
+	char* kbuff = (char*)vmalloc((sizeList*sizeof(int))*2); // Aqui reservamos memoria y guardamos el principio de todo
 	char* dest = kbuff; // Igualamos posicion con kbuff y dest es donde iremos sumando
 
 	struct list_item* item = NULL;
 	struct list_head* nodo = NULL;
+	struct list_head* aux = NULL;
 
+
+	if(*offset>=sizeList)
+		return 0;
 	/* Recorremos nuestra lista y para ello deberemos guardar en "list_head* nodo" el puntero que apunta al campo next de la estructura 
 		list_head. Luego recuperamos el puntero con list_entry() y guardamos en dest el contenido de item->data (gracias a sprintf())
 		para posteriormente pasarlo al espacio de usuario. */
-	list_for_each(nodo, &mylist){
-		item = list_entry(nodo, struct list_item, links);
-		dest += sprintf(dest, "%d\n", item->data);
-	};
+	if(!list_empty(&mylist)){
 
-	// Ahora procedemos a pasar el contenido de kbuff al espacio de usuario, si no se produce error devuelve 0
-	if(copy_to_user(buffer, &kbuff, dest - kbuff +1) != 0){
-		vfree(kbuff); // LIberamos la memoria que reservamos para almacenar la informacion
-		return -EINVAL;
+		list_for_each(nodo, &mylist){
+			item = list_entry(nodo, struct list_item, links);
+			dest += sprintf(dest, "%d\n", item->data);
+		};
+		
+		// Ahora procedemos a pasar el contenido de kbuff al espacio de usuario, si no se produce error devuelve 0
+		if(copy_to_user(buffer, kbuff, dest - kbuff +1) != 0){
+			vfree(kbuff); // LIberamos la memoria que reservamos para almacenar la informacion
+			return -EINVAL;
+		}
 	}
-	return dest - kbuff + 1; // Si todo ha ido bien devolvemos el numero de bytes leidos*/
+	printk(KERN_INFO "%d",*offset);
+	vfree(kbuff);
+	*offset += dest-kbuff;
+	printk(KERN_INFO "%d",*offset);
 
+
+	return *offset;
 }
 
 /* Funcion que se invoca cuando se desea escribir en la entrada /proc/modlist */
@@ -110,9 +129,11 @@ static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_
 
 	// ADD
 	if(sscanf(kbuff, "add %d",&n )==1){
-		item = vmalloc(sizeof(struct list_item));
+		item = (struct list_item*)vmalloc(sizeof(struct list_item));
 		item->data = n;
+		INIT_LIST_HEAD(&item->links);
 		list_add_tail(&item->links,&mylist);
+		sizeList += 1;
 		// add tail y pasarle la estructura grande->links (esquema dibujo diapo 43)
 	}
 	// REMOVE
@@ -122,19 +143,26 @@ static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_
 			if(item->data == n){
 				list_del(cur_node);
 				vfree(item);
+				sizeList -= 1;
 			}
 		};
 	}
 	// CLEAUNP
+	//else if(sscanf(kbuff,"%s","cleanup")==1){
 	else if(sscanf(kbuff,"cleanup")==1){
 		list_for_each_safe(cur_node, aux, &mylist) {
+			printk(KERN_INFO "borrando...");
 			item = list_entry(cur_node, struct list_item, links);
 			list_del(cur_node);
 			vfree(item);
+			sizeList -= 1;
+
 		};
 	}
 	else
 	 -EINVAL;
+				printk(KERN_INFO "borrando...");
+
 	return len;
 }
 
