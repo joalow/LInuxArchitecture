@@ -2,6 +2,7 @@
 #include <linux/kernel.h>	/* Definición de KERN_INFO */
 #include <linux/proc_fs.h>
 #include <linux/vmalloc.h>
+#include <linux/seq_file.h>
 #include <asm/uaccess.h>
 MODULE_LICENSE("GPL"); 	/*  Licencia del modulo */
 
@@ -10,7 +11,11 @@ struct proc_dir_entry* my_proc; // Entrada /proc
 
 // NODOS DE LA LISTA
 struct list_item {
-	int data;
+	#ifdef P_01
+		char* data = (char*)vmalloc(1000);
+	#else
+		int data;
+	#endif
 	struct list_head links;
 };
 
@@ -38,6 +43,7 @@ int modulo_lin_init(void)
 		INIT_LIST_HEAD(&mylist); // Inicializamos la lista enlazada
 	}
 	/* Devolver 0 para indicar una carga correcta del módulo */
+	printk(KERN_INFO "Modulo cargado correctamente.");
 	return 0;
 }
 
@@ -59,6 +65,7 @@ void modulo_lin_clean(void)
 			vfree(item);
 		};
 	}
+	printk(KERN_INFO "Modulo descargado correctamente.");
 }
 
 /* Funcion que se invoca cuando se desea leer la entrada /proc/modlist */
@@ -108,12 +115,31 @@ static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_
 	kbuff[len] = '\0';
 
 	// ADD
+	#ifdef P_01
+	if(sscanf(kbuff, "add %s",kbuff )==1){
+		item = (struct list_item*)vmalloc(sizeof(struct list_item));
+		strcpy(item->data,kbuff);
+		list_add_tail(&item->links,&mylist);
+	}
+	#else
 	if(sscanf(kbuff, "add %d",&n )==1){
 		item = (struct list_item*)vmalloc(sizeof(struct list_item));
 		item->data = n;
 		list_add_tail(&item->links,&mylist);
 	}
+	#endif
+	
 	// REMOVE
+	#ifdef P_01
+	else if(sscanf(kbuff,"remove %s",kbuff)==1){
+		list_for_each_safe(cur_node, aux, &mylist) {
+			item = list_entry(cur_node, struct list_item, links);
+			if(strcmp(kbuff,item->data)==0){
+				list_del(cur_node);
+				vfree(item);			}
+		}
+	}
+	#else
 	else if(sscanf(kbuff,"remove %d",&n)==1){
 		list_for_each_safe(cur_node, aux, &mylist) {
 			item = list_entry(cur_node, struct list_item, links);
@@ -122,6 +148,8 @@ static ssize_t proc_write(struct file *filp, const char *buff, size_t len, loff_
 				vfree(item);			}
 		}
 	}
+	#endif
+
 	// CLEAUNP
 	else if(strcmp(kbuff,"cleanup\n")==0){
 			list_for_each_safe(cur_node, aux, &mylist) {
