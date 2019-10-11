@@ -1,6 +1,11 @@
 #include <linux/syscalls.h> /* For SYSCALL_DEFINEi() */
 #include <linux/kernel.h>
-METER INCLIUXDES!
+#include <linux/tty.h>
+#include <linux/version.h>
+#include <linux/vt_kern.h>
+#include <linux/kd.h>
+#include <linux/proc_fs.h>
+#include <linux/slab.h>
 
 
 SYSCALL_DEFINE1(ledctl, unsigned int, leds)
