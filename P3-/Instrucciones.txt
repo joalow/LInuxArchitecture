@@ -1,0 +1,10 @@
+Instrucciones:
+	1) Instalar "xdotool"
+	2) Si hay solo un blinkstick conectado: 
+		2.1) gcc -pthread -Wall -g blindrv_user.c -o drv 
+		2.2) sudo ./drv
+	3) Si hay 2 blinksticks conectados:
+		3.1) gcc -pthread -D NEW_STICK -Wall -g blinkdrv_user.c -o drv
+		3.2) sudo ./drv 
+	
+Programa de usuario con diferentes opciones en un menu: 2-arcoiris,5-volumen,6-direccion_raton
