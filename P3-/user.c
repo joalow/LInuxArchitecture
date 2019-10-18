@@ -7,47 +7,81 @@
 
 int status_exit=0;
 
-const char* led1 = "0:0xB7F24F";
-const char* led2 = "1:0xB7F24F";
-const char* led3 = "2:0xB7F24F";
-const char* led4 = "3:0xB7F24F";
-const char* led5 = "4:0xB7F24F";
-const char* led6 = "5:0xB7F24F";
-const char* led7 = "6:0xB7F24F";
-const char* led8 = "7:0xB7F24F";
+#define DISPOSITIVO_1       "/dev/usb/blinkstick0"
+int blinkstick0; // Descriptor del blinkstick0 DISPOSITIVO_1
+
+#ifdef NEW_STICK
+    #define DISPOSITIVO_2       "/dev/usb/blinkstick1"
+    int blinkstick1;            // Descriptor del blinkstick0 DISPOSITIVO_2
+#endif
+
+const char* led1 = "0:0x27222F";
+const char* led2 = "1:0x27222F";
+const char* led3 = "2:0x27222F";
+const char* led4 = "3:0x27222F";
+const char* led5 = "4:0x27222F";
+const char* led6 = "5:0x27222F";
+const char* led7 = "6:0x27222F";
+const char* led8 = "7:0x27222F";
+
+struct region{
+    int xR;
+    int xL;
+};
 
 char fich[] = "/dev/usb/blinkstick0";
-int fichero;
+int blinkstick0;
 
 void getScreenSize(int* sizeX, int* sizeY){
     int num;
     FILE *fp;
-    char* buffer = malloc(80);  
+    char* buffer = malloc(100);  
 
-    strcat(buffer," ");
-    fp = popen("xrandr | grep '*' | cut -d x -f1","r"); //get sizeX
+    fp = popen("xrandr | grep '*' | cut -d 'x'  -f1 | cut --bytes=4-8","r"); //get sizeX
     if(fp){
         while (fgets(buffer, sizeof(buffer)-1, fp) != NULL) { }
-        printf("%s\n",buffer );
         if(sscanf(buffer,"%d",&num)!=1)
             printf("ERROR\n");
-        printf("%d\n",num);
-        //*x = num;
+        *sizeX = num;
         pclose(fp);
     }
     fp = popen("xrandr | grep '*' | cut -d x -f2 | cut -d ' ' -f1","r"); //get sizeY
     if(fp){
         while (fgets(buffer, sizeof(buffer)-1, fp) != NULL) { }
-        printf("%s\n",buffer );
         if(sscanf(buffer,"%d",&num)!=1)
             printf("ERROR\n");
-        printf("%d\n",num);
-        //*x = num;
+        *sizeY = num;
         pclose(fp);
     }
+    free(buffer);
 }
 
-void getMouseCood(int* x, int* y){
+struct region* createRegions(){
+    struct region* regions = malloc(sizeof(struct region)*16);
+    int* sizeX = malloc(sizeof(int));
+    int* sizeY = malloc(sizeof(int));
+    int space;
+    int xfirst,xsecond;
+
+    xfirst = 0, xsecond = 0;
+    getScreenSize(sizeX,sizeY);
+    space = *sizeX / 16;
+    int i =0;
+    while(i < 16){
+        struct region reg;
+        xfirst = (i*space);
+        xsecond += space;
+        reg.xL = xfirst;
+        reg.xR = xsecond;
+        regions[i] = reg;
+        i++;
+    }
+    free(sizeX);
+    free(sizeY);
+    return regions;
+}
+
+void getMouseCood(int* x/*, int* y*/){
     int num;
     FILE *fp;
     char* buffer = malloc(80);  
@@ -61,15 +95,16 @@ void getMouseCood(int* x, int* y){
         *x = num;
         pclose(fp);
     }
-    fp = popen("xdotool getmouselocation | cut -d y -f2 | cut -d : -f2 | cut -d s -f1","r"); //get Y
+    /*fp = popen("xdotool getmouselocation | cut -d y -f2 | cut -d : -f2 | cut -d s -f1","r"); //get Y
     if(fp){
         while (fgets(buffer, sizeof(buffer)-1, fp) != NULL) { }
         if(sscanf(buffer,"%d",&num)!=1)
             printf("ERROR\n");
         //printf("%d\n",num);
-        *y = num;
+        //*y = num;
         pclose(fp);
-    }
+    }*/
+    free(buffer);
 }
 
 int getVolume(){
@@ -79,7 +114,7 @@ int getVolume(){
     char* buffer = malloc(80);
     char aux[80];
 
-    fp = popen("pactl list sinks | grep '^[[:space:]]Volume:' | \head -n $(( $SINK + 1 )) |  cut -d / -f2 | cut -d % -f1","r");
+    fp = popen("pactl list sinks | grep '^[[:space:]]Volume:' | head -n $(( $SINK + 1 )) |  cut -d / -f2 | cut -d % -f1","r");
     if(fp){
         while (fgets(buffer, sizeof(buffer)-1, fp) != NULL) { }
         while(*buffer == ' ') {buffer++;}
@@ -92,6 +127,166 @@ int getVolume(){
     }
 
      return num;
+}
+
+int inReg(int x, struct region r){
+    if(x >= r.xL && x < r.xR){
+        return 1;
+    }
+    return  0;
+}
+
+void mouseMovement(){
+    int x;
+    int use;
+    struct region* regions = malloc(sizeof(struct region)*16);
+    char *l = malloc(40);
+
+    use = -1;
+    regions = createRegions();
+    while(!status_exit){
+        usleep(100000);
+        strcpy(l," ");
+        getMouseCood(&x);
+        printf("%d\n",x);
+
+        if(inReg(x,regions[0])>0){
+           if(use != 1){
+            write(blinkstick1,"\n",1);
+                strcat(l,led1); 
+                strcat(l,"\n");
+                write(blinkstick0,l,11);
+                use=1;
+            }
+        }else if(inReg(x,regions[1])>0){
+            if(use != 2){
+                write(blinkstick1,"\n",1);
+                strcat(l,led2);
+                strcat(l,"\n");
+                write(blinkstick0,l,11);
+                use = 2;
+            }
+        }else if(inReg(x,regions[2])>0){
+           if(use != 3){
+            write(blinkstick1,"\n",1);
+                strcat(l,led3);
+                strcat(l,"\n");
+                write(blinkstick0,l,11);
+                use = 3;
+            }
+        }else if(inReg(x,regions[3])>0){
+            if(use != 4){
+                write(blinkstick1,"\n",1);
+                strcat(l,led4);
+                strcat(l,"\n");
+                write(blinkstick0,l,11);
+                use = 4;
+            }
+        }else if(inReg(x,regions[4])>0){
+            if(use != 5){
+                write(blinkstick1,"\n",1);
+                strcat(l,led5);
+                strcat(l,"\n");
+                write(blinkstick0,l,11);
+                use = 5;
+            }
+        }else if(inReg(x,regions[5])>0){
+            if(use != 6){
+                write(blinkstick1,"\n",1);
+                strcat(l,led6);
+                strcat(l,"\n");
+                write(blinkstick0,l,11);
+                use = 6;
+            }
+        }else if(inReg(x,regions[6])>0){
+            if(use != 7){
+                write(blinkstick1,"\n",1);
+                strcat(l,led7);
+                strcat(l,"\n");
+                write(blinkstick0,l,11);
+                use = 7;
+            }
+        }else if(inReg(x,regions[7])>0){
+            if(use != 8){
+                write(blinkstick1,"\n",1);
+                strcat(l,led8);
+                strcat(l,"\n");
+                write(blinkstick0,l,11);
+                use = 8;
+            }
+        }else if(inReg(x,regions[8])>0){
+                if(use != 9){
+                    write(blinkstick0,"\n",1);
+                    strcat(l,led8);
+                    strcat(l,"\n");
+                    write(blinkstick1,l,11);
+                    use = 9;
+                }
+            }else if(inReg(x,regions[9])>0){
+                if(use != 10){
+                    write(blinkstick0,"\n",1);
+                    strcat(l,led7);
+                    strcat(l,"\n");
+                    write(blinkstick1,l,11);
+                    use = 10;
+                }
+
+            }else if(inReg(x,regions[10])>0){
+                if(use != 11){
+                    write(blinkstick0,"\n",1);
+                    strcat(l,led6);
+                    strcat(l,"\n");
+                    write(blinkstick1,l,11);
+                    use = 11;
+                }
+            }else if(inReg(x,regions[11])>0){
+                if(use != 12){
+                    write(blinkstick0,"\n",1);
+                    strcat(l,led5);
+                    strcat(l,"\n");
+                    write(blinkstick1,l,11);
+                    use = 12;
+                }
+            }else if(inReg(x,regions[12])>0){
+                if(use != 13){
+                    write(blinkstick0,"\n",1);
+                    strcat(l,led4);
+                    strcat(l,"\n");
+                    write(blinkstick1,l,11);
+                    use = 13;
+                }
+            }else if(inReg(x,regions[13])>0){
+                if(use != 14){
+                    write(blinkstick0,"\n",1);
+                    strcat(l,led3);
+                    strcat(l,"\n");
+                    write(blinkstick1,l,11);
+                    use = 14;
+                }
+            }else if(inReg(x,regions[14])>0){
+                if(use != 15){
+                        write(blinkstick0,"\n",1);
+                    strcat(l,led2);
+                    strcat(l,"\n");
+                    write(blinkstick1,l,11);
+                    use = 15;
+                }
+            }else if(inReg(x,regions[15])>0){
+                if(use != 16){
+                    write(blinkstick0,"\n",1);
+                    strcat(l,led1);
+                    strcat(l,"\n");
+                    write(blinkstick1,l,11);
+                    use = 16;
+                }
+            }else{
+
+                write(blinkstick0,"\n",1);
+                write(blinkstick1,"\n",1);
+            }
+        
+   }
+
 }
 
 void volume(){
@@ -107,14 +302,14 @@ void volume(){
 
         if(n<2){
             if(use != 0){
-                write(fichero,"\n",1);
+                write(blinkstick0,"\n",1);
                 use = 0;
             }
         }else if(n > 2 && n < 22){
             if(use != 1){
                 strcat(l,led1); 
                 strcat(l,"\n");
-                write(fichero,l,11);
+                write(blinkstick0,l,11);
                 use=1;
             }
         }else if(n>=22 && n < 40){
@@ -123,7 +318,7 @@ void volume(){
                 strcat(l,",");
                 strcat(l,led2);
                 strcat(l,"\n");
-                write(fichero,l,22);
+                write(blinkstick0,l,22);
                 use = 2;
             }
         }else if(n>=40 && n<55){
@@ -134,7 +329,7 @@ void volume(){
                 strcat(l,",");
                 strcat(l,led3);
                 strcat(l,"\n");
-                write(fichero,l,33);
+                write(blinkstick0,l,33);
                 use = 3;
             }
         }else if(n>=55 && n<70){
@@ -147,7 +342,7 @@ void volume(){
                 strcat(l,",");
                 strcat(l,led4);
                 strcat(l,"\n");
-                write(fichero,l,44);
+                write(blinkstick0,l,44);
                 use = 4;
             }
         }else if(n>=70 && n<85){
@@ -162,7 +357,7 @@ void volume(){
                 strcat(l,",");
                 strcat(l,led5);
                 strcat(l,"\n");
-                write(fichero,l,55);
+                write(blinkstick0,l,55);
                 use = 5;
             }
         }else if(n>=85 && n<100){
@@ -179,7 +374,7 @@ void volume(){
                 strcat(l,",");
                 strcat(l,led6);
                 strcat(l,"\n");
-                write(fichero,l,66);
+                write(blinkstick0,l,66);
                 use = 6;
             }
         }else if(n>=100 && n<115){
@@ -198,7 +393,7 @@ void volume(){
                 strcat(l,",");
                 strcat(l,led7);
                 strcat(l,"\n");
-                write(fichero,l,77);
+                write(blinkstick0,l,77);
                 use = 7;
             }
         }else if(n>=115){
@@ -219,11 +414,11 @@ void volume(){
                 strcat(l,",");
                 strcat(l,led8);
                 strcat(l,"\n");
-                write(fichero,l,88);
+                write(blinkstick0,l,88);
                 use = 8;
             }
         }else{
-            write(fichero,"\n",1);
+            write(blinkstick0,"\n",1);
         }
         
         usleep(100000);
@@ -237,11 +432,18 @@ void stop(){
 }
 
 int main(){
-    fichero = open(fich,O_WRONLY | O_CREAT | O_TRUNC);
+    if ((blinkstick0 = open(DISPOSITIVO_1, O_WRONLY)) < 0)
+        return -1;
+    
+    #ifdef NEW_STICK
+        if ((blinkstick1 = open(DISPOSITIVO_2, O_WRONLY)) < 0)
+            return -1;
+    #endif
 
+    //mouseMovement();
     volume();
     
-    close(fichero);
+    close(blinkstick0);
 
     return 0;
 }
