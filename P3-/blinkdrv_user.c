@@ -7,18 +7,21 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <linux/input.h>
+#include <pthread.h> 
 
 #define ENCENDER_TODO		"0:101010,1:101010,2:101010,3:101010,4:101010,5:101010,6:101010,7:101010,8:101010"
 #define APAGAR_TODO			"0:000000,1:000000,2:000000,3:000000,4:000000,5:000000,6:000000,7:000000,8:000000"
 
 #define DISPOSITIVO_1		"/dev/usb/blinkstick0"
 int blinkstick0;			// Descriptor del fichero DISPOSITIVO_1
+int blinkstick1;			// Descriptor del fichero DISPOSITIVO_2
 
 #define ARCOIRIS(index) for(index = 0; index < 20; ++index)
 
+
 #ifdef NEW_STICK
 	#define DISPOSITIVO_2		"/dev/usb/blinkstick1"
-	int blinkstick1;			// Descriptor del fichero DISPOSITIVO_2
+	
 #endif
 
 struct region{
@@ -57,6 +60,8 @@ int encenderLed();
 
 int main(){
 	int eleccionMenu;
+	pthread_t t1;
+	pthread_t t2;
 
 	if ((blinkstick0 = open(DISPOSITIVO_1, O_WRONLY)) < 0)
 		return -1;
@@ -79,10 +84,16 @@ int main(){
 					break;
 			case 5: moverHaciaLaIzquierda();
 					break;
-			case 6: volume();
+			case 6: //volume();
+					pthread_create(&t1, NULL, volume, NULL); 
+					pthread_create(&t2, NULL, stop, NULL);
+					pthread_join(t2,NULL);
 					break;
-			case 7: mouseMovement();
-			break;
+			case 7: //mouseMovement();
+					pthread_create(&t1, NULL, mouseMovement, NULL); 
+					pthread_create(&t2, NULL, stop, NULL);
+					pthread_join(t2,NULL);
+					break;
 		}
 		if(eleccionMenu != 0) eleccionMenu = mostrarMenu();
 	}
@@ -571,7 +582,8 @@ int apagarLeds(){
 
 /* FUNCIONES PARA CONTROLAR LOS LEDS SEGUN AJUSTEMOS EL VOLUMEN DEL SISTEMA */
 void stop(){
-    printf("Press 'Enter' to exit the program: ... ");
+	status_exit = 0;
+    printf("Press 'Enter' to continue with the program: ... ");
     while ( getchar() != '\n');
 }
 
