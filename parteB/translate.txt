@@ -1,0 +1,37 @@
+void cond_wait(){
+    if(down_interruptible(&sem_mtx))
+      return -EINTR;
+
+    while(condicion==false){
+        nr_waiting++;
+        up(&sem_mtx); /*Libera el 'mutex' */
+        /*se bloquea en la cola */
+        if(down_interruptible(&sem_quee)){
+            down(&sem_mtx);
+            nr_waiting--;
+            up(&sem_mtx);
+            return -EINTR;
+        }
+        /* Adquiere el mutx */
+        if(down_interruptible(&sem_mtx))
+            return -EINTR;
+    }
+    /* Libera el mute */
+    up(&sem_mtx);
+}
+
+void cond_signal(){
+    if(down_interruptible(&sem_mtx))
+      return -EINTR;
+
+    if(nr_waiting > 0){
+        /* Despierta 1 de los hilos bloqueados */
+        up(&sem _mutex);
+        nr_waiting--;
+    }
+
+    /* Libera el mute */
+    up(&sem_mtx);
+}
+
+
