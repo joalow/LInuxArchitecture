@@ -1,10 +1,13 @@
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/kfifo.h>
+#include <linux/proc_fs.h>
+#include <linux/vmalloc.h>
+#include <asm/uaccess.h>
 
-// TODO preguntar sobre MAXCBUFF Y KBUFF
+#define MAX_KBUF 64
+#define MAX_CBUFFER_LEN 64
 
 struct kfifo cbuffer;/* Buffer circular*/
 int prod_count = 0;/* Númerode procesos que abrieron la entrada/proc para escritura(productores) */
@@ -19,11 +22,19 @@ int nr_cons_waiting = 0;/* Número de procesos consumidores esperando*/
 
 struct proc_dir_entry* my_proc; // Entrada /proc
 
+static int fifoproc_release(struct inode *inode, struct file *file);
+static int fifoproc_open(struct inode *inode, struct file *file);
+static ssize_t fifoproc_read(struct file *file, char *buff, size_t len, loff_t *offset);
+static ssize_t fifoproc_write(struct file *file, const char *buff, size_t len, loff_t *offset);
+
+
+
+
 static struct file_operations fops = {
 	.read 	= fifoproc_read,
 	.write 	= fifoproc_write,
 	.open 	= fifoproc_open,
-	.close 	= fifoproc_release
+	.release 	= fifoproc_release,
 };
 
 /* Funcionesde inicialización y descargadel módulo*/
@@ -31,7 +42,7 @@ int init_module(void){
 	kfifo_alloc(&cbuffer,MAX_CBUFFER_LEN,GFP_KERNEL);
     sema_init(&mtx,1);
 	sema_init(&sem_prod,0);
-	sema_init(&sem_cons,0);Detectar fin de
+	sema_init(&sem_cons,0);
 	my_proc = proc_create("prodcons", 0666, NULL, &fops); // Creamos la entrada /proc/modlist
 	if(my_proc == NULL)
 		return -EAGAIN; // Error: ty again
@@ -45,23 +56,40 @@ void cleanup_module(void){
 }
 
 /* Se invocaal hacerclose() de entrada/proc*/
-static int fifoproc_release(struct inode *inode, struct file *file, ){
-	if(file->f_mode & FMODE_READ)
+static int fifoproc_release (struct inode *inode, struct file *file){
+	 if(down_interruptible(&mtx))
+	      return -EINTR;
+
+	if(file->f_mode & FMODE_READ){
         cons_count--;
-    else
+	    if(nr_prod_waiting > 0){
+	        /* Despierta 1 de los hilos bloqueados */
+	        nr_prod_waiting--;
+			up(&sem_prod);
+	    }
+	}else{
         prod_count--;
+
+	    if(nr_cons_waiting > 0){
+	        /* Despierta 1 de los hilos bloqueados */
+	        nr_cons_waiting--;
+			up(&sem_cons);
+	    }
+	}
 
     if(cons_count == 0 && prod_count == 0)
         kfifo_reset(&cbuffer);
+
+	up(&mtx);
 }
 
 /* Se invocaal haceropen() de entrada/proc*/
 static int fifoproc_open(struct inode *inode, struct file *file){
     if (file->f_mode & FMODE_READ){
         /* Un consumidorabrió el FIFO*/
-        cons_count++;
-	    if(down_interruptible(&mtx))
+        if(down_interruptible(&mtx))
 	      return -EINTR;
+		cons_count++;
 
 	    while(prod_count == 0){
 	        nr_cons_waiting++;
@@ -85,17 +113,17 @@ static int fifoproc_open(struct inode *inode, struct file *file){
 
 	    if(nr_cons_waiting > 0){
 	        /* Despierta 1 de los hilos bloqueados */
-	        up(&sem_cons);
 	        nr_cons_waiting--;
+			up(&sem_cons);
 	    }
 	    up(&mtx);
     	//cond_signal(sem_cons, &nr_cons_waiting);
 
     } else{
-	        /* Un productorabrió el FIFO*/
-	     prod_count++;
-	     if(down_interruptible(&mtx))
+	    /* Un productorabrió el FIFO*/
+		if(down_interruptible(&mtx))
 	      return -EINTR;
+	     prod_count++;
 
 	    while(cons_count == 0 ){
 	       nr_prod_waiting++;
@@ -119,17 +147,17 @@ static int fifoproc_open(struct inode *inode, struct file *file){
 
 	    if(nr_prod_waiting > 0){
 	        /* Despierta 1 de los hilos bloqueados */
-	        up(&sem_prod);
 	        nr_prod_waiting--;
+			up(&sem_prod);
 	    }
 	    up(&mtx);
 	    //cond_signal(sem_prod, &nr_prod_waiting);
     }
-    return 0;
+    return 0; //ESTE RETURN??
 }
 
 /* Se invocaal hacer read() de entrada/proc*/
-static ssize_t fifoproc_read(struct file *file, char *str, size_t len, loff_t *offset){
+static ssize_t fifoproc_read(struct file *file, char *buff, size_t len, loff_t *offset){
 	char kbuffer[MAX_KBUF];
 
     if (len > MAX_CBUFFER_LEN || len > MAX_KBUF) 
@@ -164,15 +192,17 @@ static ssize_t fifoproc_read(struct file *file, char *str, size_t len, loff_t *o
     /* Libera el mute */
     if(nr_prod_waiting > 0){
         /* Despierta 1 de los hilos bloqueados */
-        up(&sem_prod);
         nr_prod_waiting--;
+		up(&sem_prod);
     }
     up(&mtx);
+	copy_to_user(buff,&kbuffer,len);
+
     return len;
 }
 
 /* Se invocaal hacer write() de entrada/proc*/
-int fifoproc_write(char* buff,int len) {
+static ssize_t fifoproc_write(struct file *file, const char *buff, size_t len, loff_t *offset){
 	char kbuffer[MAX_KBUF];
 	if (len> MAX_CBUFFER_LEN || len> MAX_KBUF) {
 		return -ENOBUFS;
@@ -199,7 +229,7 @@ int fifoproc_write(char* buff,int len) {
     }
 	/* Detectar fin de comunicación por error(consumidor cierra FIFO antes) */
 	if (cons_count==0) {
-		unlock(mtx);
+		up(&mtx);
 		return -EPIPE;
 	}
 	kfifo_in(&cbuffer,kbuffer,len);
@@ -208,8 +238,8 @@ int fifoproc_write(char* buff,int len) {
 	//cond_signal(cons,&nr_cons_waiting);
 	if(nr_cons_waiting > 0){
         /* Despierta 1 de los hilos bloqueados */
-        up(&sem_cons);
         nr_cons_waiting--;
+		up(&sem_cons);
     }
 
     /* Libera el mute */
@@ -218,5 +248,5 @@ int fifoproc_write(char* buff,int len) {
 	return len;
 }
 
-module_init(init_module);
-module_exit(cleanup_module);
+//module_init(init_module);
+//module_exit(cleanup_module);

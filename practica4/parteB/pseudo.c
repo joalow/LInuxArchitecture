@@ -1,75 +1,29 @@
 DEFINE_MUTEX(mtx);
-//condvar prod,cons;
+#define MAX_KBUF 64
+#define MAX_CBUFFER_LEN 64
+
+condvar prod,cons;
 struct semaphore sem_cons, sem_prod;
 int prod_count=0,cons_count=0;
 struct kfifo cbuffer;
 
 void fifoproc_open(bool abre_para_lectura) {
-     if(abre_para_lectura){
+    if(abre_para_lectura){
+         lock(mtx);
         cons_count++;
-        lock(mtx);
         while(prod_count==0)
             cond_wait(cons,mtx);
         cond_signal(cons);
         unlock(mtx);
     }else{
+         lock(mtx);
         prod_count++;
-        lock(mtx);
         while(cons_count == 0)
             cond_wait(prod,mtx);
         cond_signal(prod);
         unlock(mtx);
-    }
-    
+    }   
 }
-
-
-/************************************************************************
- * *****************************************************************
- */
-
-void cond_wait(){
-    if(down_interruptible(&sem_mtx))
-      return -EINTR;
-
-    while(condicion==false){
-        nr_waiting++;
-        up(&sem_mtx); /*Libera el 'mutex' */
-        /*se bloquea en la cola */
-        if(down_interruptible(&sem_quee)){
-            down(&sem_mtx);
-            nr_waiting--;
-            up(&sem_mtx);
-            return -EINTR;
-        }
-        /* Adquiere el mutx */
-        if(down_interruptible(&sem_mtx))
-            return -EINTR;
-    }
-    /* Libera el mute */
-    up(&sem_mtx);
-}
-
-void cond_signal(){
-    if(down_interruptible(&sem_mtx))
-      return -EINTR;
-
-    if(nr_waiting > 0){
-        /* Despierta 1 de los hilos bloqueados */
-        up(&sem _mutex);
-        nr_waiting--;
-    }
-
-    /* Libera el mute */
-    up(&sem_mtx);
-}
-
-
-
-/***********************************************************************
- * *********************************************************
- */
-
 
 int fifoproc_write(char* buff,int len) {
     char kbuffer[MAX_KBUF];
@@ -79,10 +33,12 @@ int fifoproc_write(char* buff,int len) {
     if(copy_from_user(kbuffer,buff,len))
         return Error;
     
-    lock(mtx);/* Esperar hastaque haya hueco para insertar(debe haber consumidores) */
+    lock(mtx);
+    /* Esperar hastaque haya hueco para insertar(debe haber consumidores) */
     while(kfifo_avail(&cbuffer)< len && cons_count > 0){
         cond_wait(prod,mtx);
-    }/* Detectar fin de comunicación por error(consumidor cierra FIFO antes) */
+    }
+    /* Detectar fin de comunicación por error(consumidor cierra FIFO antes) */
     if (cons_count == 0) {
         unlock(mtx);
         return-EPIPE;
@@ -110,15 +66,22 @@ int fifoproc_read(const char* buff,int len) {
     kfifo_out(&cbuffer,kbuffer,len);/* Despertar a posible productor bloqueado*/
     cond_signal(prod);
     unlock(mtx);
+    copy_to_user(buff,&kbuffer,len);
     return len;
 }
 
 void fifoproc_release(bool lectura) {
-    if(lectura)
+    lock(mtx);
+    if(lectura){
         cons_count--;
-    else
+        cond_signal(prod);
+    }else{
         prod_count--;
+        cond_signal(cons);
+    }
 
     if(cons_count == 0 && prod_count == 0)
-        kfifo_reset(&cbuffer)
+        kfifo_reset(&cbuffer);
+
+    unlock(mtx);
 }

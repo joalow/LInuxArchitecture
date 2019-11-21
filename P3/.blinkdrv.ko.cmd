@@ -1,0 +1,1 @@
+cmd_/home/joalow/Documents/ARCH_LIN/P3/blinkdrv.ko := ld -r -m elf_x86_64  -z max-page-size=0x200000 -T /usr/src/linux-headers-4.9.0-9-common/scripts/module-common.lds --build-id  -o /home/joalow/Documents/ARCH_LIN/P3/blinkdrv.ko /home/joalow/Documents/ARCH_LIN/P3/blinkdrv.o /home/joalow/Documents/ARCH_LIN/P3/blinkdrv.mod.o ;  true

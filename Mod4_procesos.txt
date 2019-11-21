@@ -1,0 +1,5 @@
+Creacion/Duplicado de procesos:									
+	1.Creacion Task Struct							V	COW(copy on write)
+	2.Crear nuevo espacio direcciones				V	
+		-Crear nuevo Tabla Paginas para hijo		V
+		-Duplica c/pag. de mem. padre(muy costoso)	X
