@@ -61,6 +61,7 @@ static int fifoproc_release (struct inode *inode, struct file *file){
 	      return -EINTR;
 
 	if(file->f_mode & FMODE_READ){
+		printk("Open --READ\n");
         cons_count--;
 	    if(nr_prod_waiting > 0){
 	        /* Despierta 1 de los hilos bloqueados */
@@ -69,6 +70,7 @@ static int fifoproc_release (struct inode *inode, struct file *file){
 	    }
 	}else{
         prod_count--;
+        printk("Open --write\n");
 
 	    if(nr_cons_waiting > 0){
 	        /* Despierta 1 de los hilos bloqueados */
@@ -86,6 +88,7 @@ static int fifoproc_release (struct inode *inode, struct file *file){
 /* Se invocaal haceropen() de entrada/proc*/
 static int fifoproc_open(struct inode *inode, struct file *file){
     if (file->f_mode & FMODE_READ){
+    	printk("Open READ\n");
         /* Un consumidorabrió el FIFO*/
         if(down_interruptible(&mtx))
 	      return -EINTR;
@@ -111,15 +114,16 @@ static int fifoproc_open(struct inode *inode, struct file *file){
   	  	if(down_interruptible(&mtx))
      		 return -EINTR;
 
-	    if(nr_cons_waiting > 0){
+	    if(nr_prod_waiting > 0){
 	        /* Despierta 1 de los hilos bloqueados */
-	        nr_cons_waiting--;
-			up(&sem_cons);
+	        nr_prod_waiting--;
+			up(&sem_prod);
 	    }
 	    up(&mtx);
     	//cond_signal(sem_cons, &nr_cons_waiting);
 
     } else{
+    	printk("Open WRITE\n");
 	    /* Un productorabrió el FIFO*/
 		if(down_interruptible(&mtx))
 	      return -EINTR;
@@ -145,10 +149,10 @@ static int fifoproc_open(struct inode *inode, struct file *file){
 	    if(down_interruptible(&mtx))
      		 return -EINTR;
 
-	    if(nr_prod_waiting > 0){
+	    if(nr_cons_waiting > 0){
 	        /* Despierta 1 de los hilos bloqueados */
-	        nr_prod_waiting--;
-			up(&sem_prod);
+	        nr_cons_waiting--;
+			up(&sem_cons);
 	    }
 	    up(&mtx);
 	    //cond_signal(sem_prod, &nr_prod_waiting);
