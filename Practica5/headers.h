@@ -6,6 +6,7 @@
 #include <linux/errno.h>
 #include <linux/proc_fs.h>
 #include <linux/vmalloc.h>
+#include <linux/slab.h>
 #include <asm/uaccess.h>
 #include <linux/spinlock.h>
 #include <linux/random.h>
