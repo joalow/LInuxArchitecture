@@ -1,60 +1,75 @@
 #include "headers.h"
 
-#define MAX_CBUFFER_LEN 32
+int timer_period_ms;
+int max_random;
+int emergency_threshold;
 
-static struct file_operations timer_fops = {
+int conf_release (struct inode *inode, struct file *file);
+int conf_open(struct inode *inode, struct file *file);
+ssize_t conf_read(struct file *file, char *buff, size_t len, loff_t *offset);
+ssize_t conf_write(struct file *file, const char *buff, size_t len, loff_t *offset);
+
+struct file_operations config_fops = {
+        .owner = THIS_MODULE,
 	.read 	= conf_read,
 	.open 	= conf_open,
 	.release 	= conf_release,
     .write  = conf_write
 };
 
-int timer_period_ms;
-int max_random;
-int emergency_threshold;
-
-static int conf_release (struct inode *inode, struct file *file);
-static int conf_open(struct inode *inode, struct file *file);
-static ssize_t conf_read(struct file *file, char *buff, size_t len, loff_t *offset);
-static ssize_t conf_write(struct file *file, const char *buff, size_t len, loff_t *offset);
-
 /* Se invocaal hacerclose() de entrada/proc*/
-static int conf_release (struct inode *inode, struct file *file){
+int conf_release (struct inode *inode, struct file *file){
 	module_put(THIS_MODULE);
 }
 
 /* Se invocaal haceropen() de entrada/proc*/
-static int conf_open(struct inode *inode, struct file *file){
-    timer_period_ms = 500;
-    max_random = 1000;
-    emergency_threshold = 75;
-
+int conf_open(struct inode *inode, struct file *file){
+	printk(KERN_INFO "im here");
 	try_module_get(THIS_MODULE);
+printk(KERN_INFO "im there");
+return 0;
 }
 
 /* Se invocaal hacer read() de entrada/proc*/
-static ssize_t conf_read(struct file *file, char *buff, size_t len, loff_t *offset){
-	char* kbuff = (char*)vmalloc(len);
-	kbuff = "timer_period_ms="+timer_period_ms+'\n'+
-			"max_random="+max_random+'\n'+
-			"emergency_thresold="+emergency_threshold+'\n';
-	return copy_to_user(buff,kbuff,len);		
+ssize_t conf_read(struct file *file, char *buff, size_t len, loff_t *offset){
+	char* kbuff = (char*)vmalloc(len);	
+	int n;
+	char* timer = (char*)vmalloc(50);
+	char* random = (char*)vmalloc(50);
+	char* emergency = (char*)vmalloc(50);
+	
+	printk(KERN_INFO "init okay");
+	sprintf( timer, "%d", timer_period_ms);
+	sprintf( random, "%d", max_random);
+	sprintf( emergency, "%d", emergency_threshold);
+	printk(KERN_INFO "printf okay");
+
+	strcat(kbuff,"timer_period_ms=");		strcat(kbuff,timer);		strcat(kbuff,"\n");
+	strcat(kbuff,"max_random=");			strcat(kbuff,random);		strcat(kbuff,"\n");
+	strcat(kbuff,"emergency_threshold=");	strcat(kbuff,emergency);	strcat(kbuff,"\n");
+	printk(KERN_INFO "str okay");
+	printk(kbuff);
+	
+	n = copy_to_user(buff,kbuff,strlen(kbuff));	
+	sprintf( emergency, "%d", n);
+	printk(emergency);
+	return n;
 }
 
 /* Se invocaal hacer write() de entrada/proc*/
-static ssize_t conf_write(struct file *file, const char *buff, size_t len, loff_t *offset){
+ssize_t conf_write(struct file *file, const char *buff, size_t len, loff_t *offset){
 	char* kbuff = NULL;
 	char* msg = "ERROR:Comando erroneo\n";
 	int n;
 
 	kbuff = memdup_user_nul(buff, len);
-	if (IS_ERR(kbuf))
-		return PTR_ERR(kbuf);
+	if (IS_ERR(kbuff))
+		return PTR_ERR(kbuff);
 
 	// ADD
-	if(sscanf(kbuff, "time_period_ms %d",&n )==1){
+	if(sscanf(kbuff, "timer_period_ms %d",&n )==1){
 		if(n>=0){
-			time_period_ms = n;
+			timer_period_ms = n;
 		}
 	}
 	// REMOVE

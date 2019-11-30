@@ -1,10 +1,6 @@
 #include "headers.h"
 
-static struct file_operations timer_fops = {
-	.read 	= timer_read,
-	.open 	= timer_open,
-	.release 	= timer_release,
-};
+#define MAX_CBUFFER_LEN 32
 
 struct list_head mylist; // LISTA ENLAZADA
 // NODOS DE LA LISTA
@@ -22,9 +18,16 @@ struct semaphore queue;
 struct proc_dir_entry* timer_proc; // Entrada /proc/modtimer
 struct proc_dir_entry* config_proc; // Entrada /proc/modconfig
 
-static int timerproc_release(struct inode *inode, struct file *file);
-static int timerproc_open(struct inode *inode, struct file *file);
+static int timer_release(struct inode *inode, struct file *file);
+static int timer_open(struct inode *inode, struct file *file);
 static ssize_t timer_read(struct file *file, char *buff, size_t len, loff_t *offset);
+
+static struct file_operations timer_fops = {
+        .owner = THIS_MODULE,
+	.read 	= timer_read,
+	.open 	= timer_open,
+	.release = timer_release,
+};
 
 /* Funcionesde inicialización y descargadel módulo*/
 int init_module(void){
@@ -32,8 +35,12 @@ int init_module(void){
 	INIT_LIST_HEAD(&mylist); // Inicializamos la lista enlazada
 
     sema_init(&sem_list,1);
-	sema_init(&sem_queue,0);
+	sema_init(&queue,0);
 	spin_lock_init(&sp_timer);
+
+    timer_period_ms = 500;
+    max_random = 1000;
+    emergency_threshold = 75;
 
 	timer_proc = proc_create("modtimer", 0666, NULL, &timer_fops); // Creamos la entrada /proc/modtimer
 	config_proc = proc_create("modconfig", 0666, NULL, &config_fops); // Creamos la entrada /proc/modconfig
@@ -60,15 +67,14 @@ void cleanup_module(void){
 			item = list_entry(cur_node, struct list_item, links);//&mylist);
 			list_del(cur_node);
 			vfree(item);
-		};module_init(init_module);
-module_exit(cleanup_module);
+		};
 	}
 	kfifo_free(&cbuffer);
 }
 
 /* Se invocaal hacerclose() de entrada/proc*/
 static int timer_release (struct inode *inode, struct file *file){
-	del_timer_sync();
+	//del_timer_sync();
 	
 	//esperar a que acabe trabajos workquue creada
 
@@ -91,6 +97,3 @@ static ssize_t timer_read(struct file *file, char *buff, size_t len, loff_t *off
 static ssize_t timer_write(struct file *file, const char *buff, size_t len, loff_t *offset){
 	
 }
-
-module_init(init_module);
-module_exit(cleanup_module);
