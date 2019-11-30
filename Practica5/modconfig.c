@@ -48,18 +48,22 @@ ssize_t conf_read(struct file *file, char *buff, size_t len, loff_t *offset){
 	strcat(kbuff,"max_random=");			strcat(kbuff,random);		strcat(kbuff,"\n");
 	strcat(kbuff,"emergency_threshold=");	strcat(kbuff,emergency);	strcat(kbuff,"\n");
 	printk(KERN_INFO "str okay");
-	printk(kbuff);
-	
-	n = copy_to_user(buff,kbuff,strlen(kbuff));	
-	sprintf( emergency, "%d", n);
-	printk(emergency);
-	return n;
+	//printk(kbuff);
+	vfree(timer);
+	vfree(random);
+	vfree(emergency);
+	if(copy_to_user(buff, kbuff, 400) != 0){
+			vfree(kbuff); // LIberamos la memoria que reservamos para almacenar la informacion
+			return -EINVAL;
+		}
+	offset += len;
+	vfree(kbuff);
+	return 0;
 }
 
 /* Se invocaal hacer write() de entrada/proc*/
 ssize_t conf_write(struct file *file, const char *buff, size_t len, loff_t *offset){
 	char* kbuff = NULL;
-	char* msg = "ERROR:Comando erroneo\n";
 	int n;
 
 	kbuff = memdup_user_nul(buff, len);

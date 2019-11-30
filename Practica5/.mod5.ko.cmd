@@ -1,1 +1,0 @@
-cmd_/home/kernel/Escritorio/LIN/Practica5/mod5.ko := ld -r -m elf_x86_64  -z max-page-size=0x200000 -T ./scripts/module-common.lds --build-id  -o /home/kernel/Escritorio/LIN/Practica5/mod5.ko /home/kernel/Escritorio/LIN/Practica5/mod5.o /home/kernel/Escritorio/LIN/Practica5/mod5.mod.o ;  true
