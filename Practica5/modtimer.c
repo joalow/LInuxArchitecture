@@ -10,6 +10,9 @@ struct list_item {
 };
 
 struct kfifo cbuffer;/* Buffer circular*/
+struct timer_list my_timer; // Estructura para implementar el temporizador
+struct work_struct	work;
+struct workqueue_struct* wq;
 
 spinlock_t sp_timer;
 struct semaphore sem_list;
@@ -23,11 +26,31 @@ static int timer_open(struct inode *inode, struct file *file);
 static ssize_t timer_read(struct file *file, char *buff, size_t len, loff_t *offset);
 
 static struct file_operations timer_fops = {
-        .owner = THIS_MODULE,
+    .owner = THIS_MODULE,
 	.read 	= timer_read,
 	.open 	= timer_open,
 	.release = timer_release,
 };
+
+void work_function(){
+	//copiar del buffer a array, y de array a list
+}
+
+// Generar numero aleatorio y meterlo al buffer circular 
+void my_timer_function(unsigned long data){
+
+}
+
+// Funcion que usamos para incializar todo lo relativo al timer
+static void init_my_timer(){
+	init_timer(&my_timer);
+	my_timer.expires = jiffies + timer_period_ms; // EXPIRES ==> Tiempo de activacion del timer ======== timer_period_ms ????
+	my_timer.data = 0;
+	my_timer.function = my_timer_function;
+
+	// Aqui activamos el timer
+	add_timer(&my_timer);
+}
 
 /* Funcionesde inicialización y descargadel módulo*/
 int init_module(void){
@@ -37,6 +60,10 @@ int init_module(void){
     sema_init(&sem_list,1);
 	sema_init(&queue,0);
 	spin_lock_init(&sp_timer);
+
+	init_my_timer();
+	INIT_WORK(work,work_function);
+	wq = create_workqueue("bottom_half");
 
     timer_period_ms = 500;
     max_random = 1000;
@@ -93,7 +120,3 @@ static ssize_t timer_read(struct file *file, char *buff, size_t len, loff_t *off
 
 }
 
-/* Se invocaal hacer write() de entrada/proc*/
-static ssize_t timer_write(struct file *file, const char *buff, size_t len, loff_t *offset){
-	
-}
