@@ -34,11 +34,37 @@ static struct file_operations timer_fops = {
 
 void work_function(){
 	//copiar del buffer a array, y de array a list
+	int* array = vmalloc(kfifo_len()+4);
+	int i;
+
+	kfifo_out(&cbuffer,array,sizeof(int)*kfifo_len()):
+	// Procedemos a pasarlo a la lista enlazada
+	struct list_item* item = NULL;
+	for(i = 0; i < kfifo_len; i++){
+		item = (struct list_item*) vmalloc(sizeof(struct list_item));
+		item->data = array[i];
+		if(down_interruptible(&sem_list))
+			return -EINTR;
+		list_add_tail(&item->links,&mylist);
+		//up(&queue) cola de espera de lista enlazada vacia
+		up(&sem_list);
+	}
 }
 
 // Generar numero aleatorio y meterlo al buffer circular 
 void my_timer_function(unsigned long data){
+	int n = get_random_int() % max_random;
 
+	spin_lock_irqsave();
+
+	kfifo_in(&cbuffer,n,sizeof(n));
+
+	spin_lock_irqrestore();
+
+	if(kfifo_len(&cbuffer)/kfifo_size(&cbuffer) >= emergency_threshold){ //% de ocupacion alcanzado
+		queue_work(wq,&work);
+		flush_work(&work);
+	}
 }
 
 // Funcion que usamos para incializar todo lo relativo al timer
@@ -117,6 +143,11 @@ static int timer_open(struct inode *inode, struct file *file){
 
 /* Se invocaal hacer read() de entrada/proc*/
 static ssize_t timer_read(struct file *file, char *buff, size_t len, loff_t *offset){
+	struct list_item* item = NULL;
+	struct list_head* nodo = NULL;
 
+	item = list_entry(&mylist,struct list_item,links);
+	mylist->links = item->
+	
 }
 
