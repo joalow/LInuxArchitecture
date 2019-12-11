@@ -21,9 +21,13 @@ struct semaphore queue;
 struct proc_dir_entry* timer_proc; // Entrada /proc/modtimer
 struct proc_dir_entry* config_proc; // Entrada /proc/modconfig
 
+static unsigned long flags;
+
 static int timer_release(struct inode *inode, struct file *file);
 static int timer_open(struct inode *inode, struct file *file);
 static ssize_t timer_read(struct file *file, char *buff, size_t len, loff_t *offset);
+void timer_function(struct timer_list *);
+static void my_work_func(struct work_struct *work);
 
 static struct file_operations timer_fops = {
     .owner = THIS_MODULE,
@@ -32,34 +36,44 @@ static struct file_operations timer_fops = {
 	.release = timer_release,
 };
 
-void work_function(){
+static void my_work_func(struct work_struct *work)
+{
 	//copiar del buffer a array, y de array a list
-	int* array = vmalloc(kfifo_len()+4);
+	int* array = vmalloc(kfifo_len(&cbuffer));
 	int i;
 
-	kfifo_out(&cbuffer,array,sizeof(int)*kfifo_len()):
+
+	spin_lock_irqsave(&sp_timer,flags);
+
+	kfifo_out(&cbuffer,array,kfifo_len(&cbuffer));
+	printk(KERN_INFO "volcado");
+
+	spin_lock_irqrestore(&sp_timer,flags);
+	
 	// Procedemos a pasarlo a la lista enlazada
 	struct list_item* item = NULL;
-	for(i = 0; i < kfifo_len; i++){
+	for(i = 0; i < kfifo_len(&cbuffer); i++){
 		item = (struct list_item*) vmalloc(sizeof(struct list_item));
 		item->data = array[i];
 		if(down_interruptible(&sem_list))
 			return -EINTR;
+		printk(KERN_INFO "add %d", item->data);
 		list_add_tail(&item->links,&mylist);
-		//up(&queue) cola de espera de lista enlazada vacia
 		up(&sem_list);
+		up(&queue) //cola de espera de lista enlazada vacia
 	}
 }
 
 // Generar numero aleatorio y meterlo al buffer circular 
-void my_timer_function(unsigned long data){
+void my_timer_function(struct timer_list *){
 	int n = get_random_int() % max_random;
 
-	spin_lock_irqsave();
+	spin_lock_irqsave(&sp_timer,flags);
 
+	printk(KERN_INFO "numero del timer: %d", n);
 	kfifo_in(&cbuffer,n,sizeof(n));
 
-	spin_lock_irqrestore();
+	spin_lock_irqrestore(&sp_timer,flags);
 
 	if(kfifo_len(&cbuffer)/kfifo_size(&cbuffer) >= emergency_threshold){ //% de ocupacion alcanzado
 		queue_work(wq,&work);
@@ -88,9 +102,10 @@ int init_module(void){
 	spin_lock_init(&sp_timer);
 
 	init_my_timer();
-	INIT_WORK(work,work_function);
+	INIT_WORK(work,my_work_func);
 	wq = create_workqueue("bottom_half");
 
+	//DEFAULT VALUES
     timer_period_ms = 500;
     max_random = 1000;
     emergency_threshold = 75;
@@ -144,10 +159,19 @@ static int timer_open(struct inode *inode, struct file *file){
 /* Se invocaal hacer read() de entrada/proc*/
 static ssize_t timer_read(struct file *file, char *buff, size_t len, loff_t *offset){
 	struct list_item* item = NULL;
-	struct list_head* nodo = NULL;
+	struct list_head* aux = NULL;
+	struct list_head* cur_node = NULL;
+	//char* kbuff = vmalloc(sizeof(int));
 
-	item = list_entry(&mylist,struct list_item,links);
-	mylist->links = item->
+	list_for_each_safe(cur_node, aux, &mylist) {
+		char* kbuff = vmalloc(sizeof(int));
+		item = list_entry(cur_node, struct list_item, links);
+		sprintf(kbuff,"%d",item->data);
+		copy_to_user(buff,kbuff,sizeof(int));
+		list_del(cur_node);
+		vfree(item);
+		vfree(kbuff);
+	};
 	
 }
 
