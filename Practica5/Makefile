@@ -1,4 +1,4 @@
-obj-m =  mod5.o
+obj-m =  mod5.o # mod5.c no tiene que existir
 mod5-objs = modtimer.o modconfig.o
 
 all:

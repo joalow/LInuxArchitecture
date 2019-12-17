@@ -13,6 +13,7 @@
 #include <linux/kfifo.h>
 #include <linux/workqueue.h>
 #include <linux/timer.h>
+MODULE_LICENSE("GPL");
 
 extern int timer_period_ms;
 extern int max_random;

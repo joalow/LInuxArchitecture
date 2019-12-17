@@ -10,16 +10,17 @@ ssize_t conf_read(struct file *file, char *buff, size_t len, loff_t *offset);
 ssize_t conf_write(struct file *file, const char *buff, size_t len, loff_t *offset);
 
 struct file_operations config_fops = {
-        .owner = THIS_MODULE,
-	.read 	= conf_read,
-	.open 	= conf_open,
+    .owner 		= THIS_MODULE,
+	.read 		= conf_read,
+	.open 		= conf_open,
 	.release 	= conf_release,
-    .write  = conf_write
+    .write  	= conf_write
 };
 
 /* Se invocaal hacerclose() de entrada/proc*/
 int conf_release (struct inode *inode, struct file *file){
 	module_put(THIS_MODULE);
+	return 0;
 }
 
 /* Se invocaal haceropen() de entrada/proc*/
