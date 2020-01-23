@@ -1,6 +1,6 @@
 #include "headers.h"
 
-static struct file_operations control_fops = {
+struct file_operations control_fops = {
 	.owner 		= THIS_MODULE,
     //.read = proc_read,
 	.open       = ctrl_open,
@@ -8,26 +8,29 @@ static struct file_operations control_fops = {
     .write      = ctrl_write,
 };
 
-static int ctrl_release (struct inode *inode, struct file *file);
-static int ctrl_open(struct inode *inode, struct file *file);
-static ssize_t ctrl_read(struct file *file, char *buff, size_t len, loff_t *offset);
-static ssize_t ctrl_write(struct file *file, const char *buff, size_t len, loff_t *offset);
+struct proc_dir_entry* control_entry;
+
+int ctrl_release (struct inode *inode, struct file *file);
+int ctrl_open(struct inode *inode, struct file *file);
+ssize_t ctrl_read(struct file *file, char *buff, size_t len, loff_t *offset);
+ssize_t ctrl_write(struct file *file, const char *buff, size_t len, loff_t *offset);
 
 /* Se invoca al hacer close() de entrada /proc/control */
-static int ctrl_release (struct inode *inode, struct file *file){
+int ctrl_release (struct inode *inode, struct file *file){
 	module_put(THIS_MODULE);
 	return 0;
 }
 
 /* Se invocaal hacer open() de entrada/proc/control  */
-static int ctrl_open(struct inode *inode, struct file *file){
+int ctrl_open(struct inode *inode, struct file *file){
 	try_module_get(THIS_MODULE);
 	return 0;
 }
 
-static ssize_t conf_write(struct file *file, const char *buff, size_t len, loff_t *offset){
+ssize_t ctrl_write(struct file *file, const char *buff, size_t len, loff_t *offset){
 	char* kbuff = NULL;
 	char* name = NULL;
+	int boolean;
 
 	kbuff = memdup_user_nul(buff, len);
 	if (IS_ERR(kbuff))
@@ -38,16 +41,20 @@ static ssize_t conf_write(struct file *file, const char *buff, size_t len, loff_
 
 	// ADD
 	if(sscanf(kbuff, "create %s",name )==1){
-        if(numEntries < max_entries)
-            add_entry(name);
+        boolean = add_entry(name);
+        if(boolean == 1)
+        	return -EEXIST;
+        else if(boolean==2)
+        	return -EPERM;
 	// REMOVE
 	}else if(sscanf(kbuff,"delete %s",name)==1){
-		remove_entry(name);
+		if(!remove_entry(name))
+			return -ENOENT;
 	}else{
-        return -EINVAL;
+        return -EPERM;
     }
 
-	kfree(kbuff)
+	kfree(kbuff);
     vfree(name);
     return MAX_CHARS_NAME;
 }

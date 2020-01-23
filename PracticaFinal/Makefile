@@ -1,5 +1,5 @@
-obj-m =  pfinal.o # mod5.c no tiene que existir
-mod5-objs = control.o list.o
+obj-m =  pfinal.o # pfinal.c no tiene que existir
+pfinal-objs = list.o control.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
